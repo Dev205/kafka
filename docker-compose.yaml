@@ -1,0 +1,58 @@
+volumes:
+  #  For kafka persistent data
+  kafka-data: { }
+  #  For zk persistent memory
+  zk-data: { }
+  #  For zk persistent tx logs
+  zk-txn-logs: { }
+
+services:
+  zookeeper:
+    container_name: zookeeper_local_container
+    image: confluentinc/cp-zookeeper:6.2.11
+    restart: unless-stopped
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 8000
+      ZOOKEEPER_AUTOPURGE_PURGEINTERVAL: 1
+      ZOOKEEPER_AUTOPURGE_SNAPRETAINCOUNT: 3
+    ports:
+      - "22181:2181"
+    volumes:
+      - zk-data:/var/lib/zookeeper/data
+      - zk-txn-logs:/var/lib/zookeeper/log
+    healthcheck:
+      start_period: 30s
+      test: nc -z localhost 2181 || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      
+  kafka:
+    container_name: kafka_local_container
+    image: confluentinc/cp-kafka:6.2.11
+    restart: unless-stopped
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    ports:
+      - "29092:29092"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_LOG_RETENTION_HOURS: 3
+      KAFKA_LOG_RETENTION_BYTES: 104857600
+      KAFKA_LOG_SEGMENT_BYTES: 10485760
+      KAFKA_REQUEST_TIMEOUT_MS: 10000
+    healthcheck:
+      test: [ "CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 130s
